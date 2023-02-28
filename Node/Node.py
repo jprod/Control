@@ -25,6 +25,9 @@ class Control_node:
         self.control_update = control_update
         self.output_limits = output_limits
         self.parents = parents
+        self.behavioral_model = behavioral_model,
+        self.system_estimate = system_estimate,
+        self.internal_model_update = internal_model_update,
         # past and current state
         self.previous_state = []
         self.sensory_signal = []
@@ -86,9 +89,10 @@ class Control_node:
         self.behavioral_model = self.control_update(
             error=self.error, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
 
-    def go(self, reference_signal, observation):
+    def go(self, observation, reference_signal=None):
+        if reference_signal:
+            self.set_reference(reference_signal)
         self.internal_model()
-        self.set_reference(reference_signal)
         self.sense(observation)
         self.compare()
         output = self.control()
