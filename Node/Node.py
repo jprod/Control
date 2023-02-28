@@ -1,4 +1,5 @@
 from .Effector import Effector
+import numpy as np
 
 
 class Control_node:
@@ -6,7 +7,11 @@ class Control_node:
     def __init__(self,
                  sensor,
                  comparator,
+                 controller,
                  control_update,
+                 behavioral_model=None,
+                 system_estimate=None,
+                 internal_model_update=None,
                  generate_reference=None,
                  ref_integration=None,
                  sen_integration=None,
@@ -15,58 +20,80 @@ class Control_node:
                  output_limits=(None, None)):
         self.sensor = sensor
         self.comparator = comparator
-        self.effector = Effector()
+        self.controller = controller
         self.generate_reference = generate_reference
         self.control_update = control_update
         self.output_limits = output_limits
         self.parents = parents
+        # past and current state
+        self.previous_state = []
         self.sensory_signal = []
+        # error is generally a contrast between target and sensed state
         self.error = []
+        # target state
         self.reference = []
+        # predicted state
+        self.predicted_state = []
+        # past and current behavioral outputs / motor commands
+        self.previous_output = []
         self.output = []
 
     def sense(self, observation=[]):
         if not self.children:
-            # base sensor nodes get a signal passed directly to them as an observation 
-            self.sensory_signal = self.sen_integration(observation, self.error)
+            # base sensor nodes get a signal passed directly to them as an observation
+            self.previous_state = self.sensory_signal
+            # self.sensory_signal = self.sen_integration(observation, self.error)
+            self.sensory_signal = self.sensor(observation)
         else:
             inputs = [c.get_output() for c in self.children]
-            self.reference = self.sen_integration(inputs, self.error)
-        return self.reference
+            self.previous_state = self.sensory_signal
+            self.sensory_signal = self.sen_integration(inputs, self.error)
 
     def set_reference(self, reference=[]):
         if not self.parents:
             self.reference = reference
-            #self.reference = self.reference_update(self.reference, self.error)
+            # self.reference = self.reference_update(self.reference, self.error)
         else:
             inputs = [p.get_output() for p in self.parents]
             self.reference = self.ref_integration(inputs, self.error)
         return self.reference
 
-    def compare(self, reference_signal, sensory_signal):
-        if len(reference_signal) != len(sensory_signal):
+    def compare(self):
+        if len(self.reference_signal) != len(self.sensory_signal):
             raise ValueError("Sensory signal must match reference signal.")
-        self.error = self.comparator(reference_signal, sensory_signal)
+        self.error = self.comparator(
+            reference_signal=self.reference, sensory_signal=self.sense, prediction=self.predicted_state)
         return self.error
 
-    def effect(self, error):
-        self.output = self.effector.get_output(error)
+    def control(self):
+        # self.output = self.effector.get_output(error)
+        if not self.previous_output:
+            self.previous_output = np.ones(self.behavioral_model.ndim)
+        output = self.controller(
+            behavioral_model=self.behavioral_model, last_behavior=self.previous_output)
+        self.previous_output = self.output
+        self.output = output
         return self.output
 
-    def update_control(self, error):
-        Kp, Ki, Kd = self.effector.get_params()
-        Kp_new, Ki_new, Kd_new = self.control_update(error, Kp, Ki, Kd)
-        Ki_new = self.bound(Ki_new)  # prevent windup
-        self.effector.set_params(Kp_new, Ki_new, Kd_new)
+    def internal_model(self):
+        if not self.previous_state:
+            self.previous_state = np.ones(self.behavioral_model.ndim)
+        state_prediction = self.internal_model(
+            estimate=self.system_estimate, last_state=self.previous_state, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
+        return state_prediction
+
+    def update_control(self):
+        self.behavioral_model = self.control_update(
+            error=self.error, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
 
     def go(self, reference_signal, observation):
-        reference_signal = self.set_reference(reference_signal)
-        sense = self.sense(observation)
-        error = self.compare(reference_signal, sense)
-        output = self.effect(self.error)
-        self.update_control(error)
+        self.internal_model()
+        self.set_reference(reference_signal)
+        self.sense(observation)
+        self.compare()
+        output = self.control()
+        self.update_control()
         output = self.bound(output)
-        self.reference = reference_signal
         self.output = output
         return output
 
