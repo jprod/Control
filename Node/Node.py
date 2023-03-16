@@ -81,9 +81,9 @@ class Control_node:
     def internal_model(self):
         if not self.previous_state:
             self.previous_state = np.ones(self.behavioral_model.ndim)
-        state_prediction = self.internal_model(
+        self.predicted_state = self.internal_model(
             estimate=self.system_estimate, last_state=self.previous_state, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
-        return state_prediction
+        return self.predicted_state
 
     def update_control(self):
         self.behavioral_model = self.control_update(
@@ -92,7 +92,7 @@ class Control_node:
     def go(self, observation, reference_signal=None):
         if reference_signal:
             self.set_reference(reference_signal)
-        self.internal_model()
+        pred = self.internal_model()
         self.sense(observation)
         self.compare()
         output = self.control()
