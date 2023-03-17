@@ -1,4 +1,3 @@
-from .Effector import Effector
 import numpy as np
 
 
@@ -11,13 +10,16 @@ class Control_node:
                  control_update,
                  behavioral_model=None,
                  system_estimate=None,
+                 internal_model=None,
                  internal_model_update=None,
                  generate_reference=None,
+                 reference=None,
                  ref_integration=None,
                  sen_integration=None,
                  parents=[],
                  children=[],
                  output_limits=(None, None)):
+
         self.sensor = sensor
         self.comparator = comparator
         self.controller = controller
@@ -25,9 +27,10 @@ class Control_node:
         self.control_update = control_update
         self.output_limits = output_limits
         self.parents = parents
-        self.behavioral_model = behavioral_model,
-        self.system_estimate = system_estimate,
-        self.internal_model_update = internal_model_update,
+        self.behavioral_model = behavioral_model
+        self.system_estimate = system_estimate
+        self.internal_model = internal_model
+        self.internal_model_update = internal_model_update
         # past and current state
         self.previous_state = []
         self.sensory_signal = []
@@ -35,6 +38,8 @@ class Control_node:
         self.error = []
         # target state
         self.reference = []
+        if reference is None:
+            self.reference = reference
         # predicted state
         self.predicted_state = []
         # past and current behavioral outputs / motor commands
@@ -78,11 +83,11 @@ class Control_node:
         self.output = output
         return self.output
 
-    def internal_model(self):
+    def generate_estimate(self):
         if not self.previous_state:
             self.previous_state = np.ones(self.behavioral_model.ndim)
         self.predicted_state = self.internal_model(
-            estimate=self.system_estimate, last_state=self.previous_state, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
+            system_estimate=self.system_estimate, previous_state=self.previous_state, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
         return self.predicted_state
 
     def update_control(self):
@@ -92,7 +97,7 @@ class Control_node:
     def go(self, observation, reference_signal=None):
         if reference_signal:
             self.set_reference(reference_signal)
-        pred = self.internal_model()
+        self.generate_estimate()
         self.sense(observation)
         self.compare()
         output = self.control()
