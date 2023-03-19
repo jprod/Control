@@ -38,13 +38,16 @@ class Control_node:
         self.error = []
         # target state
         self.reference = []
-        if reference is None:
+        if reference is not None:
             self.reference = reference
         # predicted state
         self.predicted_state = []
         # past and current behavioral outputs / motor commands
         self.previous_output = []
         self.output = []
+        # children/parent nodes
+        self.children = children
+        self.parents = parents
 
     def sense(self, observation=[]):
         if not self.children:
@@ -67,26 +70,28 @@ class Control_node:
         return self.reference
 
     def compare(self):
-        if len(self.reference_signal) != len(self.sensory_signal):
+        if len(self.reference) != len(self.sensory_signal):
             raise ValueError("Sensory signal must match reference signal.")
         self.error = self.comparator(
-            reference_signal=self.reference, sensory_signal=self.sense, prediction=self.predicted_state)
+            reference=self.reference, sensory_signal=self.sensory_signal, prediction=self.predicted_state)
         return self.error
 
     def control(self):
         # self.output = self.effector.get_output(error)
-        if not self.previous_output:
+
+        if len(self.previous_output) == 0:
             self.previous_output = np.ones(self.behavioral_model.shape[1])
-        output = self.controller(
-            behavioral_model=self.behavioral_model, last_behavior=self.previous_output)
-        self.previous_output = self.output
+        output = self.controller(error=self.error,
+                                 behavioral_model=self.behavioral_model, previous_output=self.previous_output)
+        if len(self.output) != 0:
+            self.previous_output = self.output
         self.output = output
         return self.output
 
     def generate_estimate(self):
-        if not self.previous_state:
+        if len(self.previous_state) == 0:
             self.previous_state = np.ones(self.system_estimate.shape[1])
-        if not self.previous_output:
+        if len(self.previous_output) == 0:
             self.previous_output = np.ones(self.behavioral_model.shape[1])
         self.predicted_state = self.internal_model(
             system_estimate=self.system_estimate, previous_state=self.previous_state, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
@@ -94,11 +99,11 @@ class Control_node:
 
     def update_control(self):
         self.behavioral_model = self.control_update(
-            error=self.error, behavioral_model=self.behavioral_model, last_behavior=self.previous_behavior)
+            error=self.error, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
 
-    def go(self, observation, reference_signal=None):
-        if reference_signal:
-            self.set_reference(reference_signal)
+    def go(self, observation, reference=None):
+        if reference:
+            self.set_reference(reference)
         self.generate_estimate()
         self.sense(observation)
         self.compare()
