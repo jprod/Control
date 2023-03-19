@@ -76,7 +76,7 @@ class Control_node:
     def control(self):
         # self.output = self.effector.get_output(error)
         if not self.previous_output:
-            self.previous_output = np.ones(self.behavioral_model.ndim)
+            self.previous_output = np.ones(self.behavioral_model.shape[1])
         output = self.controller(
             behavioral_model=self.behavioral_model, last_behavior=self.previous_output)
         self.previous_output = self.output
@@ -85,7 +85,9 @@ class Control_node:
 
     def generate_estimate(self):
         if not self.previous_state:
-            self.previous_state = np.ones(self.behavioral_model.ndim)
+            self.previous_state = np.ones(self.system_estimate.shape[1])
+        if not self.previous_output:
+            self.previous_output = np.ones(self.behavioral_model.shape[1])
         self.predicted_state = self.internal_model(
             system_estimate=self.system_estimate, previous_state=self.previous_state, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
         return self.predicted_state
