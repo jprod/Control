@@ -14,6 +14,7 @@ class Control_node:
                  internal_model_update=None,
                  generate_reference=None,
                  reference=None,
+                 init_behavior=None,
                  ref_integration=None,
                  sen_integration=None,
                  parents=[],
@@ -44,6 +45,8 @@ class Control_node:
         self.predicted_state = []
         # past and current behavioral outputs / motor commands
         self.previous_output = []
+        if init_behavior is not None:
+            self.previous_output = init_behavior
         self.output = []
         # children/parent nodes
         self.children = children
@@ -83,10 +86,10 @@ class Control_node:
             self.previous_output = np.ones(self.behavioral_model.shape[1])
         output = self.controller(error=self.error,
                                  behavioral_model=self.behavioral_model, previous_output=self.previous_output)
-        if len(self.output) != 0:
-            self.previous_output = self.output
-        self.output = output
-        return self.output
+        # if len(self.output) != 0:
+        #    self.previous_output = self.output
+        self.previous_output = output
+        return output
 
     def generate_estimate(self):
         if len(self.previous_state) == 0:
@@ -114,7 +117,7 @@ class Control_node:
         return output
 
     def get_output(self):
-        return self.output
+        return self.previous_output
 
     def get_input(self):
         return self.sensory_signal
