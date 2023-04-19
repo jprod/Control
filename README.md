@@ -1,4 +1,2 @@
 # Control
-<br/>
 
-**bold** here
