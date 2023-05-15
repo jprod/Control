@@ -12,7 +12,7 @@ class Control_node:
                  system_estimate=None,
                  internal_model=None,
                  internal_model_update=None,
-                 generate_reference=None,
+                 reference_update=None,
                  reference=None,
                  init_behavior=None,
                  ref_integration=None,
@@ -24,7 +24,7 @@ class Control_node:
         self.sensor = sensor
         self.comparator = comparator
         self.controller = controller
-        self.generate_reference = generate_reference
+        self.reference_update = reference_update
         self.control_update = control_update
         self.output_limits = output_limits
         self.parents = parents
@@ -63,10 +63,13 @@ class Control_node:
             self.previous_state = self.sensory_signal
             self.sensory_signal = self.sen_integration(inputs, self.error)
 
-    def set_reference(self, reference=[]):
-        if not self.parents:
+    def set_reference(self, reference=None, error=None):
+        if not self.parents and reference and error:
+            self.reference = self.reference_update(reference, error)
+        elif not self.parents and error:
+            self.reference = self.reference_update(self.reference, error)
+        elif not self.parents and reference:
             self.reference = reference
-            # self.reference = self.reference_update(self.reference, self.error)
         else:
             inputs = [p.get_output() for p in self.parents]
             self.reference = self.ref_integration(inputs, self.error)
@@ -109,12 +112,16 @@ class Control_node:
             self.set_reference(reference)
         self.generate_estimate()
         self.sense(observation)
-        self.compare()
+        error = self.compare()
+        self.set_reference(error=error)
         output = self.control()
         self.update_control()
         output = self.bound(output)
         self.output = output
         return output
+    
+    def get_reference(self):
+        return self.reference
 
     def get_output(self):
         return self.previous_output
