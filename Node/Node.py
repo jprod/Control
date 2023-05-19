@@ -64,16 +64,41 @@ class Control_node:
             self.sensory_signal = self.sen_integration(inputs, self.error)
 
     def set_reference(self, reference=None, error=None):
-        if not self.parents and reference and error:
-            self.reference = self.reference_update(reference, error)
-        elif not self.parents and error:
-            self.reference = self.reference_update(self.reference, error)
-        elif not self.parents and reference:
+        # init case
+        if reference is not None and error is None:
+            print("here")
             self.reference = reference
-        else:
-            inputs = [p.get_output() for p in self.parents]
-            self.reference = self.ref_integration(inputs, self.error)
+            return self.reference
+        # update case
+        if self.reference_update:
+            if error is not None:
+                if reference is not None:
+                    self.reference = self.reference_update(reference=reference, error=error)
+                elif self.reference is None:
+                    raise ValueError("no reference value in node")
+                else:
+                    self.reference = self.reference_update(reference=self.reference, error=error)
+        # no reference update function
+        #else:
+            #if error:
+                #raise ValueError("no reference update function given")
+        if not reference and not self.reference:
+            raise ValueError("no reference value provided")
         return self.reference
+    
+        # if not self.parents and reference and error:
+        #     self.reference = self.reference_update(reference, error)
+        # elif not self.parents and error and self.reference_update:
+        #     self.reference = self.reference_update(self.reference, error)
+        # elif not self.parents and reference:
+        #     self.reference = reference
+        # elif not self.parents and error:
+        #     self.reference = self.reference_update(error)
+        # elif reference:
+        #     self.reference = reference
+        #     #inputs = [p.get_output() for p in self.parents]
+        #     #self.reference = self.ref_integration(inputs, self.error)
+        # return self.reference
 
     def compare(self):
         if len(self.reference) != len(self.sensory_signal):
@@ -109,7 +134,7 @@ class Control_node:
 
     def go(self, observation, reference=None):
         if reference:
-            self.set_reference(reference)
+            self.set_reference(reference=reference)
         self.generate_estimate()
         self.sense(observation)
         error = self.compare()

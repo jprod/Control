@@ -15,6 +15,12 @@ def chaotic_controller(behavioral_model, threshold, error):
         control_signal = np.zeros(error.shape[0])
     return control_signal
 
+def prop_controller(behavioral_model, error):
+    control_signal = behavioral_model @ error
+    return control_signal
+
+
+
 
 def chaotic_update(prob, threshold, error):
     avg_abs_error = abs(np.average(error))
