@@ -10,5 +10,5 @@ class Plant:
 
     def transition(self, control_signal):
         self.state = self.transition_function(
-            control_signal, self.transition_matrix, self.state)
+            control_signal=control_signal, transition_matrix=self.transition_matrix, state=self.state)
         return self.state

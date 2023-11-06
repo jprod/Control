@@ -82,8 +82,9 @@ class Control_node:
         #else:
             #if error:
                 #raise ValueError("no reference update function given")
-        if not reference and not self.reference:
+        if reference is None and self.reference is None:
             raise ValueError("no reference value provided")
+        
         return self.reference
     
         # if not self.parents and reference and error:
