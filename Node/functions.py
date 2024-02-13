@@ -49,6 +49,18 @@ def matrix_sigmoid(x):
     '''
     return 1 / (1 + np.exp(-x))
 
+def zero_sigmoid(x):
+    '''
+    Helper sigmoid function where the intercept is 0
+    '''
+    return (1 / (1 + np.exp(-x))) - 0.5
+
+
+def abs_zero_sigmoid(x):
+    '''
+    Helper sigmoid function where the intercept is 0
+    '''
+    return 2*abs((1 / (1 + np.exp(-x))) - 0.5)
 
 def dynamic_sigmoid(i, x):
     '''
