@@ -66,7 +66,6 @@ class Control_node:
     def set_reference(self, reference=None, error=None):
         # init case
         if reference is not None and error is None:
-            print("here")
             self.reference = reference
             return self.reference
         # update case

@@ -1,6 +1,7 @@
-import numpy as np
 import math
 import random
+
+import numpy as np
 import scipy
 
 
@@ -54,6 +55,12 @@ def zero_sigmoid(x):
     Helper sigmoid function where the intercept is 0
     '''
     return (1 / (1 + np.exp(-x))) - 0.5
+
+def adjustable_sigmoid(x, slope):
+    '''
+    Helper sigmoid function where the intercept is 0 and the slope is adjustable
+    '''
+    return 2*((1 / (1 + np.exp(-x*slope))) - 0.5)
 
 
 def abs_zero_sigmoid(x):
