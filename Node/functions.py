@@ -62,6 +62,12 @@ def adjustable_sigmoid(x, slope):
     '''
     return 2*((1 / (1 + np.exp(-x*slope))) - 0.5)
 
+def shifted_sigmoid(x, slope):
+    '''
+    Helper sigmoid function where the intercept is 0 and the slope and inflection point are adjustable
+    '''
+    return (1 / (1 + np.exp((-x*slope)+slope)))
+
 
 def abs_zero_sigmoid(x):
     '''
