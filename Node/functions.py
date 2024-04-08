@@ -1,5 +1,6 @@
 import math
 import random
+from tkinter import simpledialog
 
 import numpy as np
 import scipy
@@ -62,11 +63,11 @@ def adjustable_sigmoid(x, slope):
     '''
     return 2*((1 / (1 + np.exp(-x*slope))) - 0.5)
 
-def shifted_sigmoid(x, intercept):
+def shifted_sigmoid(x, slope, intercept):
     '''
     Helper sigmoid function where the intercept is 0 and the slope and inflection point are adjustable
     '''
-    return (1 / (1 + np.exp((-x*intercept)+intercept)))
+    return (1 / (1 + np.exp((-x*slope)+intercept)))
 
 
 def abs_zero_sigmoid(x):
