@@ -12,7 +12,7 @@ def chaotic_controller(behavioral_model, threshold, error):
     # if there is a significant error, adjust according the magnitude of the error
     if avg_abs_error > threshold:
         weights = np.random.choice([1, -1], size=error.shape)
-        control_signal = behavioral_model @ (weights * error)
+        control_signal = behavioral_model @ ((weights * error)[0])
     else:
         control_signal = np.zeros(error.shape[0])
     return control_signal
