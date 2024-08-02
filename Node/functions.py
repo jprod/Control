@@ -7,7 +7,7 @@ import scipy
 
 
 def chaotic_controller(behavioral_model, threshold, error):
-    # avg absolute error
+    # avg square error
     avg_abs_error = np.average(np.square(error))
     # if there is a significant error, adjust according the magnitude of the error
     if avg_abs_error > threshold:
