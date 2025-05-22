@@ -6,14 +6,15 @@ class Control_node:
     def __init__(self,
                  sensor,
                  comparator,
-                 controller,
-                 control_update,
-                 behavioral_model=None,
+                 effector,
+                 motor,
                  system_estimate=None,
                  internal_model=None,
                  internal_model_update=None,
                  reference_update=None,
                  reference=None,
+                 motor_prior=None,
+                 motor_transform=None,
                  init_behavior=None,
                  ref_integration=None,
                  sen_integration=None,
@@ -23,20 +24,24 @@ class Control_node:
 
         self.sensor = sensor
         self.comparator = comparator
-        self.controller = controller
+        self.effector = effector
+        self.motor = motor
         self.reference_update = reference_update
-        self.control_update = control_update
-        self.output_limits = output_limits
+        self.behavior_limits = output_limits
         self.parents = parents
-        self.behavioral_model = behavioral_model
         self.system_estimate = system_estimate
         self.internal_model = internal_model
         self.internal_model_update = internal_model_update
         # past and current state
-        self.previous_state = []
+        self.previous_sense = []
         self.sensory_signal = []
         # error is generally a contrast between target and sensed state
         self.error = []
+        # motor state
+        self.motor_state = []
+        if motor_prior is not None:
+            self.motor_state = motor_prior
+        self.motor_transform = motor_transform
         # target state
         self.reference = []
         if reference is not None:
@@ -44,10 +49,10 @@ class Control_node:
         # predicted state
         self.predicted_state = []
         # past and current behavioral outputs / motor commands
-        self.previous_output = []
+        self.previous_move = []
         if init_behavior is not None:
-            self.previous_output = init_behavior
-        self.output = []
+            self.previous_move = init_behavior
+        # self.behavior = [] # UNUSED RN
         # children/parent nodes
         self.children = children
         self.parents = parents
@@ -55,13 +60,14 @@ class Control_node:
     def sense(self, observation=[]):
         if not self.children:
             # base sensor nodes get a signal passed directly to them as an observation
-            self.previous_state = self.sensory_signal
+            self.previous_sense = self.sensory_signal
             # self.sensory_signal = self.sen_integration(observation, self.error)
             self.sensory_signal = self.sensor(observation)
         else:
             inputs = [c.get_output() for c in self.children]
-            self.previous_state = self.sensory_signal
+            self.previous_sense = self.sensory_signal
             self.sensory_signal = self.sen_integration(inputs, self.error)
+        return self.sensory_signal
 
     def set_reference(self, reference=None, error=None):
         # init case
@@ -100,56 +106,73 @@ class Control_node:
         #     #self.reference = self.ref_integration(inputs, self.error)
         # return self.reference
 
-    def compare(self):
-        if len(self.reference) != len(self.sensory_signal):
+    def compare(self, sensory_signal):
+        if len(self.reference) != len(sensory_signal):
             raise ValueError("Sensory signal must match reference signal.")
         self.error = self.comparator(
             reference=self.reference, sensory_signal=self.sensory_signal, prediction=self.predicted_state)
         return self.error
 
-    def control(self):
-        # self.output = self.effector.get_output(error)
+    def effect(self, error):
+        motor_signal = self.effector(self.motor_state, error, self.motor_transform)
+        self.motor_state = motor_signal
+        return motor_signal
 
-        if len(self.previous_output) == 0:
-            self.previous_output = np.ones(self.behavioral_model.shape[0])
-        output = self.controller(error=self.error,
-                                 behavioral_model=self.behavioral_model, previous_output=self.previous_output)
-        # if len(self.output) != 0:
-        #    self.previous_output = self.output
-        self.previous_output = output
-        return output
+    def _prev_move_init(self):
+        if len(self.previous_move) == 0:
+            self.previous_move = np.ones(self.behavioral_model.shape[0])
+    
+    def move(self, motor_signal):
+        self._prev_move_init()
+        behavior = self.motor(motor_signal=motor_signal)
+        # if len(self.behavior) != 0:
+        #    self.previous_move = self.behavior
+        self.previous_move = behavior
+        return behavior
 
     def generate_estimate(self):
-        if len(self.previous_state) == 0:
-            self.previous_state = np.ones(self.system_estimate.shape[0])
-        if len(self.previous_output) == 0:
-            self.previous_output = np.ones(self.behavioral_model.shape[0])
+        if len(self.previous_sense) == 0:
+            self.previous_sense = np.ones(self.system_estimate.shape[0])
+        self._prev_move_init()
         self.predicted_state = self.internal_model(
-            system_estimate=self.system_estimate, previous_state=self.previous_state, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
+            system_estimate=self.system_estimate, 
+            previous_sense=self.previous_sense,
+            previous_move=self.previous_move)
         return self.predicted_state
 
-    def update_control(self):
-        self.behavioral_model = self.control_update(
-            error=self.error, behavioral_model=self.behavioral_model, previous_output=self.previous_output)
+    # def update_control(self):
+    #     self.behavioral_model = self.control_update(
+    #         error=self.error, behavioral_model=self.behavioral_model, previous_move=self.previous_move)
 
+    # MAIN
     def go(self, observation, reference=None):
         if reference:
             self.set_reference(reference=reference)
         self.generate_estimate()
-        self.sense(observation)
-        error = self.compare()
+
+        #sensory compression
+        sense_signal = self.sense(observation)
+
+        #comparison and refrence signal adjustment
+        error = self.compare(sensory_signal=sense_signal)
         self.set_reference(error=error)
-        output = self.control()
-        self.update_control()
-        output = self.bound(output)
-        self.output = output
-        return output
+
+        #effector
+        motor_signal = self.effect(error=error)
+
+        #motor decompression and bounding
+        behavior = self.move(motor_signal=motor_signal)
+        # self.update_move()
+        behavior = self.bound(behavior)
+        
+        # self.behavior = behavior
+        return behavior
     
     def get_reference(self):
         return self.reference
 
     def get_output(self):
-        return self.previous_output
+        return self.previous_move
 
     def get_input(self):
         return self.sensory_signal
@@ -158,9 +181,9 @@ class Control_node:
         return self.error
 
     def bound(self, val):
-        if self.output_limits[0] and self.output_limits[1]:
-            lower = min(self.output_limits)
-            upper = max(self.output_limits)
+        if self.behavior_limits[0] and self.behavior_limits[1]:
+            lower = min(self.behavior_limits)
+            upper = max(self.behavior_limits)
             if upper is not None and val > upper:
                 return upper
             if lower is not None and val < lower:
