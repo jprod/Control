@@ -110,7 +110,9 @@ class Control_node:
         if len(self.reference) != len(sensory_signal):
             raise ValueError("Sensory signal must match reference signal.")
         self.error = self.comparator(
-            reference=self.reference, sensory_signal=self.sensory_signal, prediction=self.predicted_state)
+            sensory_signal=self.sensory_signal, 
+            reference=self.reference, 
+            prediction=self.predicted_state)
         return self.error
 
     def effect(self, error):
@@ -174,18 +176,27 @@ class Control_node:
     def get_output(self):
         return self.previous_move
 
+    def get_state(self):
+        return self.motor_state
+    
     def get_input(self):
         return self.sensory_signal
 
     def get_error(self):
         return self.error
 
+    def get_signals(self):
+        return (self.sensory_signal, self.reference, self.error, 
+                self.motor_state, self.previous_move)
+    
     def bound(self, val):
         if self.behavior_limits[0] and self.behavior_limits[1]:
             lower = min(self.behavior_limits)
             upper = max(self.behavior_limits)
-            if upper is not None and val > upper:
-                return upper
-            if lower is not None and val < lower:
-                return lower
+            valcopy = val.copy()
+            if upper is not None:
+                valcopy[val > upper] = upper
+            if lower is not None:
+                valcopy[val < lower] = lower
+            return valcopy
         return val
