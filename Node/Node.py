@@ -46,6 +46,7 @@ class Control_node:
         self.reference = []
         if reference is not None:
             self.reference = reference
+            self.reference_initial = self.reference.copy()
         # predicted state
         self.predicted_state = []
         # past and current behavioral outputs / motor commands
@@ -73,16 +74,17 @@ class Control_node:
         # init case
         if reference is not None and error is None:
             self.reference = reference
+            self.reference_initial = self.reference.copy()
             return self.reference
         # update case
         if self.reference_update:
             if error is not None:
                 if reference is not None:
-                    self.reference = self.reference_update(reference=reference, error=error)
+                    self.reference = self.reference_update(reference=reference, error=error, initial_reference=self.reference_initial)
                 elif self.reference is None:
                     raise ValueError("no reference value in node")
                 else:
-                    self.reference = self.reference_update(reference=self.reference, error=error)
+                    self.reference = self.reference_update(reference=self.reference, error=error, initial_reference=self.reference_initial)
         # no reference update function
         #else:
             #if error:
@@ -108,7 +110,8 @@ class Control_node:
 
     def compare(self, sensory_signal):
         if len(self.reference) != len(sensory_signal):
-            raise ValueError("Sensory signal must match reference signal.")
+            raise ValueError(f"Sensory signal must match reference signal. \
+                Compared sizes were ref:{len(self.reference)} and sense:{len(sensory_signal)}")
         self.error = self.comparator(
             sensory_signal=self.sensory_signal, 
             reference=self.reference, 
