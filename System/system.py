@@ -1,6 +1,16 @@
 import numpy as np
 
 class System:
+    """A generalized control system
+
+    Attributes
+    ----------
+    state_space : numpy.ndarray, optional
+        The state of all signals for every timepoint
+    name : str, optional
+        The name of the system
+
+    """
     def __init__(
             self, 
             initial_state_space,
@@ -10,9 +20,36 @@ class System:
             name=None,
             verbose=False
             ):
+        """Creates a system
+
+        Parmeters
+        ---------
+        initial_state_space : 2D numpy.ndarray
+            The initial state of every signal in the system. The shape is 2D,
+            (number of channels, signal size). Where a signal in a channel is
+            represented by a 1D vector of a user-specified length.
+        transition_functions : list of None and tuples of (function, ndarray)
+            The transition function leading to each signal. e.g. the
+            transition function at index 0 would be creating the signal in
+            channel 0. If the function is None then it is parsed as an input
+            channel. When it is a tuple, it must be in the form 
+            (callable_function, channel_mask), where channel_mask filters
+            the channels being sent to the callable_function.
+        channel_names : list of str, optional
+            A list of channel names.
+        output_channel_idx : 1D numpy.ndarray
+            A index mask for the output channel
+            NOTE: Multi-channel output not implmented yet
+        name : str, optional
+            The name of the system
+        verbost : bool, optional
+            flag to display intermediate steps
+
+        """
         if len(initial_state_space) != len(transition_functions):
-            raise ValueError("Length of state space does not match \
-                              transition function")
+            raise ValueError(f"Length of state space \
+                ({len(initial_state_space)}) does not match number of \
+                transition functions ({len(transition_functions)})")
         self._initial_state_space = initial_state_space
         self._n_channels, self._signal_len = initial_state_space.shape
         self._transition_functions = transition_functions
@@ -39,7 +76,20 @@ class System:
 
 
     def __call__(self, *input_channels):
-        # Steps the state through their transition functions
+        """Steps the state through their transition functions
+
+        Parmeters
+        ---------
+        input_channels : list of 1D numpy.ndarray, optional
+            The input signals of the system
+
+        Returns
+        -------
+        1D numpy.ndarray, contingent
+            If output_channel_idx is defined, returns the output channel
+            of the system
+
+        """
         if self._current_step is None:
             raise ValueError("There is no current step")
         _s = self._current_step
@@ -65,7 +115,24 @@ class System:
 
 
     def go(self, number_of_steps=50):
-        # Deep start state spaces
+        """Simulates the whole system for a set amount of timesteps
+
+        Parmeters
+        ---------
+        input_channels : list of 1D numpy.ndarray, optional
+            The input signals of the system
+
+        Returns
+        -------
+        3D numpy.ndarray
+            The deep state space of the system; a concatenation of the state 
+            space of this system and the inner subsystems if it has them.
+            The shape is 3D, (number of timepoints, total number of channels, 
+            signal size). Where number of timepoints is the number of steps
+            specified, total number of channels is the number channels and
+            number of channels in composed subsystems.
+
+        """
         self.deep_start(number_of_steps)
         # Loop per steps
         for step in range(1,number_of_steps):
@@ -75,19 +142,24 @@ class System:
     # ------------- #
 
     def deep_start(self, number_of_steps=50):
-        # Starts the state spaces
+        # Starts the state spaces and the nested state spaces
         for subsys in self._subsystems:
             subsys.deep_start(number_of_steps=number_of_steps)
+        # NOTE: populates entire history with the initial state space
+        #   Could be an issue if the functions don't fully describe
+        #   the state space and a channel is indeterminate for a timepoint.
         self.state_space = np.stack(
             [self._initial_state_space] * number_of_steps, axis=0) 
         self._current_step = 1
 
     def deep_state_space(self):
+        # Retrieves the state spaces and the nested state spaces
         return np.concatenate([self.state_space[:, self._no_output_mask]] + 
             [subsys.deep_state_space() for subsys in self._subsystems],
             axis=1)
 
     def deep_channel_names(self):
+        # Retrieves the channel names and the nested channel names
         sysname = f"{self.name} " if self.name is not None else ""
         if self._channel_names is None:
             valid_chans = np.arange(self._n_channels)[self._no_output_mask]
@@ -103,6 +175,9 @@ class System:
 # ========================================================================= #
 
 class Agent(System):
+    """A social agent control system
+
+    """
     def __init__(
             self,
             sensor,
@@ -111,15 +186,40 @@ class Agent(System):
             motor,
             feedback,
             signal_len,
+            motor_prior=None,
             reference_initial=None,
             channel_names=None,
             **kwargs
             ):
+        """Creates an agent
+
+        Parmeters
+        ---------
+        sensor : (numpy.ndarray) -> numpy.ndarray
+            Sensory compression function.
+        comparator : (numpy.ndarray, numpy.ndarray) -> numpy.ndarray
+            Comparator function. 
+        effector : (numpy.ndarray, numpy.ndarray) -> numpy.ndarray
+            Effector function.
+        motor : (numpy.ndarray) -> numpy.ndarray
+            Motor decompression function.
+        feedback : (ndarray, ndarray, ndarray) -> ndarray
+            Reference update function.
+        signal_len : int
+            Max length of a signal.
+        motor_prior : 1D numpy.ndarray, optional
+            The inital state of the effector signal.
+        reference_initial : 1D numpy.ndarray, optional
+            The inital state of the reference signal.
+        channel_names : list of str, optional
+            The names for each of the seven channels. Otherwise auto-assigned.
+
+        """
         self._signal_len = signal_len
         n = signal_len
-        self.motor_transform_matrix = np.eye(n)
 
-        motor_prior = np.zeros((1,n))
+        if motor_prior is None:
+            motor_prior = np.zeros((1,n))
         if reference_initial is None:
             reference_initial = np.zeros((1,n))
         state_space = np.concatenate(
