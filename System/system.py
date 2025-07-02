@@ -96,22 +96,22 @@ class System:
 
         # NOTE: attempted to code the following as parallel as possible
         # Transition all
-        curr_state = self.state_space[_s-1]
+        prev_step = self.state_space[_s-1]
         if len(self._input_channels_idxs) > 0:
-            curr_state[self._input_channels_idxs] = np.array(input_channels)
-        next_step_list = [fn[0](*curr_state[fn[1]])
+            prev_step[self._input_channels_idxs] = np.array(input_channels)
+        curr_step_list = [fn[0](*prev_step[fn[1]])
             if fn is not None else np.zeros(self._signal_len)
             for fn in self._transition_functions]
         # TODO: Add a demultiplexer incase theres one fn -> many channels
-        next_step = np.array(next_step_list)
+        curr_step = np.array(curr_step_list)
 
         # Set in matrix
         # NOTE: could use a short buffer instead...
-        self.state_space[_s] = next_step
+        self.state_space[_s] = curr_step
 
         self._current_step += 1
         if self._output_channel_idx is not None:
-            return next_step[self._output_channel_idx]
+            return curr_step[self._output_channel_idx]
 
 
     def go(self, number_of_steps=50):
@@ -147,7 +147,8 @@ class System:
             subsys.deep_start(number_of_steps=number_of_steps)
         # NOTE: populates entire history with the initial state space
         #   Could be an issue if the functions don't fully describe
-        #   the state space and a channel is indeterminate for a timepoint.
+        #   the state space and a channel is indeterminate for a timepoint,
+        #   and/or is not overwritten at every timepoint.
         self.state_space = np.stack(
             [self._initial_state_space] * number_of_steps, axis=0) 
         self._current_step = 1
