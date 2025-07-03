@@ -28,13 +28,16 @@ class System:
             The initial state of every signal in the system. The shape is 2D,
             (number of channels, signal size). Where a signal in a channel is
             represented by a 1D vector of a user-specified length.
-        transition_functions : list of None and tuples of (function, ndarray)
+        transition_functions : list of None, ints, tuples of (function, ndarray)
             The transition function leading to each signal. e.g. the
             transition function at index 0 would be creating the signal in
             channel 0. If the function is None then it is parsed as an input
-            channel. When it is a tuple, it must be in the form 
-            (callable_function, channel_mask), where channel_mask filters
-            the channels being sent to the callable_function.
+            channel. When the function is an int, it is interpreted as the 
+            channel for the target of a demux. You cannot link a demuxed 
+            channel to another demuxed channel. When it is a tuple, 
+            it must be in the form (callable_function, channel_mask), 
+            where channel_mask filters the channels being sent to the 
+            callable_function.
         channel_names : list of str, optional
             A list of channel names.
         output_channel_idx : 1D numpy.ndarray
@@ -56,11 +59,15 @@ class System:
         self._channel_names = channel_names
         self._subsystems = []
         self._input_channels_idxs = []
+        self._demux_channels = []
         for i, fn in enumerate(self._transition_functions):
             if fn is None:
                 self._input_channels_idxs.append(i)
+            elif isinstance(fn, (int, np.integer)):
+                self._demux_channels.append(fn) # src
             elif isinstance(fn[0], System):
                 self._subsystems.append(fn[0])
+        self._demux_channels = np.unique(self._demux_channels)
         self._output_channel_idx = output_channel_idx
         self._no_output_mask = np.ones(self._n_channels, dtype=bool)
         if self._output_channel_idx is not None:
@@ -95,13 +102,27 @@ class System:
         _s = self._current_step
 
         # NOTE: attempted to code the following as parallel as possible
-        # Transition all
         prev_step = self.state_space[_s-1]
+        # Input
         if len(self._input_channels_idxs) > 0:
             prev_step[self._input_channels_idxs] = np.array(input_channels)
-        curr_step_list = [fn[0](*prev_step[fn[1]])
-            if fn is not None else np.zeros(self._signal_len)
+        # Transition all
+        curr_step_list_undemux = [
+            np.zeros(self._signal_len) if fn is None else
+            fn if isinstance(fn, (int, np.integer)) else 
+            fn[0](*prev_step[fn[1]])
             for fn in self._transition_functions]
+        # Demux
+        if len(self._demux_channels) >= 1:
+            for i in self._demux_channels:
+                curr_step_list_undemux[i] = iter(curr_step_list_undemux[i])
+            curr_step_list = [
+                s if isinstance(s, np.ndarray) else 
+                next(curr_step_list_undemux[s]) 
+                    if isinstance(s, (int, np.integer)) else 
+                next(s) for s in curr_step_list_undemux]
+        else:
+            curr_step_list = curr_step_list_undemux
         # TODO: Add a demultiplexer incase theres one fn -> many channels
         curr_step = np.array(curr_step_list)
 
