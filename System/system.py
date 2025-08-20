@@ -123,7 +123,6 @@ class System:
                 next(s) for s in curr_step_list_undemux]
         else:
             curr_step_list = curr_step_list_undemux
-        # TODO: Add a demultiplexer incase theres one fn -> many channels
         curr_step = np.array(curr_step_list)
 
         # Set in matrix
@@ -177,7 +176,9 @@ class System:
     def deep_state_space(self):
         # Retrieves the state spaces and the nested state spaces
         return np.concatenate([self.state_space[:, self._no_output_mask]] + 
-            [subsys.deep_state_space() for subsys in self._subsystems],
+            [ss for ss in 
+            [subsys.deep_state_space() for subsys in self._subsystems]
+            if ss is not None],
             axis=1)
 
     def deep_channel_names(self):
@@ -192,7 +193,8 @@ class System:
                 if self._no_output_mask[i]]
         return outer_ch_names + \
             [ch_name for subsys in self._subsystems
-                for ch_name in subsys.deep_channel_names()]
+                for ch_name in subsys.deep_channel_names() 
+                if ch_name is not None]
 
 # ========================================================================= #
 
@@ -275,3 +277,70 @@ class Agent(System):
             channel_names=channel_names,
             output_channel_idx=4,
             **kwargs)
+
+# ========================================================================= #
+
+class Lag(System):
+    """A queued buffer that selects random values for a jittered lag
+
+    """
+    def __init__(
+            self,
+            signal_len,
+            lags_per_n=None,
+            max_lag=10,
+            buffer_fill=0.0,
+            name="lag",
+            invis=True,
+            random_mask=False,
+            ):
+        self._signal_len = signal_len
+        if lags_per_n is not None:
+            self.max_lag = np.max(lags_per_n)
+            self.lag_mask = lags_per_n
+        elif max_lag == 0:
+            self.max_lag = max_lag
+            self.lag_mask = np.zeros(self._signal_len,int)
+        else:
+            self.max_lag = max_lag
+            self.lag_mask = np.random.randint(0,self.max_lag+1,self._signal_len)
+        self._signal_buffer_init = np.full((max_lag+1, signal_len), buffer_fill)
+        self.signal_buffer = None
+        self._initial_state_space = np.full((1,signal_len), buffer_fill)
+        self.state_space = None
+        self._current_step = None
+        self._invis = invis
+        self.name = name
+        self.random_mask = random_mask
+        
+
+    def __call__(self, input_channel):
+        if self.signal_buffer is None:
+            raise ValueError("There is no current buffer")
+        # Input
+        self.signal_buffer = np.roll(self.signal_buffer,1,axis=0)
+        self.signal_buffer[0,:] = input_channel
+        if self.random_mask:
+            self.lag_mask = np.random.randint(0,self.max_lag+1,self._signal_len)
+        if not self._invis:
+            _s = self._current_step
+            self.state_space[_s] = input_channel
+            self._current_step += 1
+        return self.signal_buffer[self.lag_mask].diagonal()
+        
+    def deep_start(self, number_of_steps):
+        self.signal_buffer = self._signal_buffer_init
+        if not self._invis:
+            self.state_space = np.stack(
+                [self._initial_state_space] * number_of_steps, axis=0) 
+            self._current_step = 1
+
+    def deep_state_space(self):
+        if not self._invis:
+            return self.state_space
+        return None
+
+    def deep_channel_names(self):
+        if not self._invis:
+            return [self.name]
+        return [None]
